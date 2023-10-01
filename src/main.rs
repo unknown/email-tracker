@@ -1,9 +1,9 @@
 use axum::{
-    extract::{ConnectInfo, Path},
+    extract::{ConnectInfo, Path, State},
     http::{header, HeaderValue},
     response::IntoResponse,
     routing::get,
-    Extension, Router,
+    Router,
 };
 use base64::{engine::general_purpose, Engine as _};
 use std::{
@@ -12,8 +12,6 @@ use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
-use tower::ServiceBuilder;
-use tower_http::add_extension::AddExtensionLayer;
 
 type SharedState = Arc<Mutex<AppState>>;
 
@@ -24,14 +22,12 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    let state = SharedState::default();
+
     let app = Router::new()
         .route("/tracker/*path", get(tracker))
         .route("/views/*path", get(views))
-        .layer(
-            ServiceBuilder::new()
-                .layer(AddExtensionLayer::new(SharedState::default()))
-                .into_inner(),
-        );
+        .with_state(state);
 
     let host = env::var("HOST").unwrap_or("127.0.0.1".to_string());
     let port = env::var("PORT").unwrap_or("3030".to_string());
@@ -46,7 +42,7 @@ async fn main() {
 async fn tracker(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(path): Path<String>,
-    Extension(state): Extension<SharedState>,
+    State(state): State<SharedState>,
 ) -> impl IntoResponse {
     let mut lock = state.lock().unwrap();
     let new_view_count = *lock.view_counts.get(&path.clone()).unwrap_or(&0) + 1;
@@ -62,10 +58,7 @@ async fn tracker(
     )
 }
 
-async fn views(
-    Path(path): Path<String>,
-    Extension(state): Extension<SharedState>,
-) -> impl IntoResponse {
+async fn views(Path(path): Path<String>, State(state): State<SharedState>) -> impl IntoResponse {
     let lock = &state.lock().unwrap();
     let view_count = lock.view_counts.get(&path.clone()).unwrap_or(&0);
     format!("{view_count}")
