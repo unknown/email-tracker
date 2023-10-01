@@ -1,6 +1,6 @@
 use axum::{
     extract::{ConnectInfo, Path},
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderValue},
     response::IntoResponse,
     routing::get,
     Extension, Router,
@@ -25,8 +25,8 @@ struct AppState {
 #[tokio::main]
 async fn main() {
     let app = Router::new()
-        .route("/favicon.ico", get(favicon))
-        .route("/*path", get(image))
+        .route("/tracker/*path", get(tracker))
+        .route("/views/*path", get(views))
         .layer(
             ServiceBuilder::new()
                 .layer(AddExtensionLayer::new(SharedState::default()))
@@ -43,20 +43,16 @@ async fn main() {
         .expect("Failed to start server");
 }
 
-async fn favicon() -> impl IntoResponse {
-    StatusCode::NOT_FOUND
-}
-
-async fn image(
+async fn tracker(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(path): Path<String>,
     Extension(state): Extension<SharedState>,
 ) -> impl IntoResponse {
     let mut lock = state.lock().unwrap();
-    let view_count = *lock.view_counts.get(&path.clone()).unwrap_or(&0) + 1;
-    lock.view_counts.insert(path.clone(), view_count);
+    let new_view_count = *lock.view_counts.get(&path.clone()).unwrap_or(&0) + 1;
+    lock.view_counts.insert(path.clone(), new_view_count);
 
-    println!("Request from {addr} to /{path} ({view_count} views)");
+    println!("Request from {addr} to /{path} ({new_view_count} views)");
 
     let one_pixel_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPk+89QDwADvgGOSHzRgAAAAABJRU5ErkJggg==";
     let one_pixel = general_purpose::STANDARD.decode(one_pixel_base64).unwrap();
@@ -64,4 +60,13 @@ async fn image(
         [(header::CONTENT_TYPE, HeaderValue::from_static("image/png"))],
         one_pixel,
     )
+}
+
+async fn views(
+    Path(path): Path<String>,
+    Extension(state): Extension<SharedState>,
+) -> impl IntoResponse {
+    let lock = &state.lock().unwrap();
+    let view_count = lock.view_counts.get(&path.clone()).unwrap_or(&0);
+    format!("{view_count}")
 }
