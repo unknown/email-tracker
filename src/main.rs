@@ -33,6 +33,7 @@ async fn main() {
     let port = env::var("PORT").unwrap_or("3030".to_string());
     let addr = format!("{host}:{port}");
     println!("Server started, listening on http://{addr}");
+
     axum::Server::bind(&addr.parse().unwrap())
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
@@ -45,7 +46,7 @@ async fn tracker(
     State(state): State<SharedState>,
 ) -> impl IntoResponse {
     let mut lock = state.lock().unwrap();
-    let new_view_count = *lock.view_counts.get(&path.clone()).unwrap_or(&0) + 1;
+    let new_view_count = *lock.view_counts.get(&path).unwrap_or(&0) + 1;
     lock.view_counts.insert(path.clone(), new_view_count);
 
     println!("Request from {addr} to /{path} ({new_view_count} views)");
@@ -60,6 +61,6 @@ async fn tracker(
 
 async fn views(Path(path): Path<String>, State(state): State<SharedState>) -> impl IntoResponse {
     let lock = &state.lock().unwrap();
-    let view_count = lock.view_counts.get(&path.clone()).unwrap_or(&0);
+    let view_count = lock.view_counts.get(&path).unwrap_or(&0);
     format!("{view_count}")
 }
